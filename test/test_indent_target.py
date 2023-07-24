@@ -11,7 +11,7 @@ def load(path, **configs):
             >>> import paddle
             >>> for i in range(3):
             ...     print(i)
-
+            ... 
     .. note::
         If you load model saved by ``paddle.static.save_inference_model`` ,
         there will be the following limitations when using it in fine-tuning:
@@ -58,24 +58,24 @@ def load(path, **configs):
             >>> class RandomDataset(paddle.io.Dataset):
             ...     def __init__(self, num_samples):
             ...         self.num_samples = num_samples
-
+            ... 
             ...     def __getitem__(self, idx):
             ...         image = np.random.random([IMAGE_SIZE]).astype('float32')
             ...         label = np.random.randint(0, CLASS_NUM - 1, (1, )).astype('int64')
             ...         return image, label
-
+            ... 
             ...     def __len__(self):
             ...         return self.num_samples
-
+            ... 
             >>> class LinearNet(nn.Layer):
             ...     def __init__(self):
             ...         super().__init__()
             ...         self._linear = nn.Linear(IMAGE_SIZE, CLASS_NUM)
-
+            ... 
             ...     @paddle.jit.to_static
             ...     def forward(self, x):
             ...         return self._linear(x)
-
+            ... 
             >>> def train(layer, loader, loss_fn, opt):
             ...     for epoch_id in range(EPOCH_NUM):
             ...         for batch_id, (image, label) in enumerate(loader()):
@@ -86,7 +86,7 @@ def load(path, **configs):
             ...             opt.clear_grad()
             ...             print("Epoch {} batch {}: loss = {}".format(
             ...                 epoch_id, batch_id, np.mean(loss.numpy())))
-
+            ... 
             >>> # 1. train & save model.
 
             >>> # create network
@@ -101,7 +101,7 @@ def load(path, **configs):
             ...     shuffle=True,
             ...     drop_last=True,
             ...     num_workers=2)
-
+            ... 
             >>> # train
             >>> train(layer, loader, loss_fn, adam)
 
@@ -148,15 +148,15 @@ def load(path, **configs):
             >>> class RandomDataset(paddle.io.Dataset):
             ...     def __init__(self, num_samples):
             ...         self.num_samples = num_samples
-
+            ... 
             ...     def __getitem__(self, idx):
             ...         image = np.random.random([IMAGE_SIZE]).astype('float32')
             ...         label = np.random.randint(0, CLASS_NUM - 1, (1, )).astype('int64')
             ...         return image, label
-
+            ... 
             ...     def __len__(self):
             ...         return self.num_samples
-
+            ... 
             >>> paddle.enable_static()
 
             >>> image = static.data(name='image', shape=[None, 784], dtype='float32')
@@ -182,18 +182,18 @@ def load(path, **configs):
             ...     drop_last=True,
             ...     return_list=False,
             ...     num_workers=2)
-
+            ... 
             >>> # 1. train and save inference model
             >>> for data in loader():
             ...     exe.run(
             ...         static.default_main_program(),
             ...         feed=data,
             ...         fetch_list=[avg_loss])
-
+            ... 
             >>> model_path = "fc.example.model"
             >>> paddle.fluid.io.save_inference_model(
             ...     model_path, ["image"], [pred], exe)
-
+            ... 
             >>> # 2. load model
 
             >>> # enable dygraph mode

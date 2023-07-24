@@ -62,7 +62,7 @@ def convert_doctest(code_lines):
 
             elif prev_state in {CODE_PS1, CODE_PS2}:
                 if not linecont_lstrip:
-                    curr_state = CODE_PS1
+                    curr_state = prev_state
                     curr_indent = prev_indent
                 
                 else:
@@ -98,7 +98,7 @@ def convert_doctest(code_lines):
             results.append((' '*curr_indent + '>>> ' + linecont_lstrip) if linecont_lstrip else '\n')
 
         elif curr_state == CODE_PS2:
-            results.append((' '*curr_indent + '... ' + linecont_lstrip) if linecont_lstrip else '\n')
+            results.append(' '*curr_indent + '... ' + (linecont_lstrip if linecont_lstrip else '\n'))
 
         else:
             raise
