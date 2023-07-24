@@ -2,6 +2,11 @@ import sys
 import re
 
 MIN_INDENT = 4
+STOP_CHAR = {'"""', "'''"}
+
+def get_better_indent(indent, min_indent):
+    indent_d, indent_m = divmod(indent, min_indent)
+    return (indent_d + int(indent_m>0))*min_indent
 
 def convert_doctest(code_lines):
     results = []
@@ -17,8 +22,8 @@ def convert_doctest(code_lines):
 
     prev_indent = 0
     curr_indent = 0
-    text_indent = 0
     code_indent = 0
+    diff_indent = 0
 
     pattern_codeblock = re.compile(r"\.\.\s+code-block::\s*python")
     pattern_line = re.compile(r"\S")
@@ -33,20 +38,20 @@ def convert_doctest(code_lines):
         if match_codeblock is not None:
             # just for line => .. code-block:: python
             curr_state = CODE_BLOCK
-            curr_indent = text_indent + MIN_INDENT
+
+            curr_indent = get_better_indent(line_start, MIN_INDENT)
+            diff_indent = curr_indent - line_start
             code_indent = curr_indent
 
         else:
 
             if prev_state == TEXT:
                 curr_state = TEXT
-                text_indent = curr_indent = line_start if linecont_lstrip else prev_indent
             
             elif prev_state == CODE_BLOCK:
                 if linecont_lstrip.startswith(':name'):
                     curr_state = CODE_NAME
                     curr_indent = prev_indent + MIN_INDENT
-
                 else:
                     curr_state = CODE_PS1
                     curr_indent = prev_indent + MIN_INDENT
@@ -61,19 +66,18 @@ def convert_doctest(code_lines):
                     curr_indent = prev_indent
                 
                 else:
-                    if line_start < code_indent:
+                    # force stop with STOP_CHAR, in case of wrong indent.
+                    if line_start + diff_indent <= code_indent or linecont.strip() in STOP_CHAR:
                         curr_state = TEXT
                         curr_indent = line_start
                         code_indent = 0
 
-                    else:
-                        indent_d, indent_m = divmod(line_start, MIN_INDENT)
-                        ps2_indent = (indent_d + int(indent_m>0))*MIN_INDENT
-
+                    else:                        
+                        ps2_indent = get_better_indent(line_start, MIN_INDENT) + diff_indent
                         if ps2_indent > prev_indent:
                             curr_state = CODE_PS2
                             curr_indent = prev_indent
-                            linecont_lstrip = ' '*(ps2_indent-curr_indent) + linecont_lstrip
+                            linecont_lstrip = ' '*(get_better_indent(ps2_indent-curr_indent, MIN_INDENT)) + linecont_lstrip
                         else:
                             curr_state = CODE_PS1
                             curr_indent = prev_indent

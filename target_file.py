@@ -1100,14 +1100,14 @@ def add(x, y, name=None):
 
         For example:
 
-            .. code-block:: python
+        .. code-block:: python
 
-                >>> shape(X) = (2, 3, 4, 5), shape(Y) = (,)
-                >>> shape(X) = (2, 3, 4, 5), shape(Y) = (5,)
-                >>> shape(X) = (2, 3, 4, 5), shape(Y) = (4, 5), with axis=-1(default) or axis=2
-                >>> shape(X) = (2, 3, 4, 5), shape(Y) = (3, 4), with axis=1
-                >>> shape(X) = (2, 3, 4, 5), shape(Y) = (2), with axis=0
-                >>> shape(X) = (2, 3, 4, 5), shape(Y) = (2, 1), with axis=0
+            >>> shape(X) = (2, 3, 4, 5), shape(Y) = (,)
+            >>> shape(X) = (2, 3, 4, 5), shape(Y) = (5,)
+            >>> shape(X) = (2, 3, 4, 5), shape(Y) = (4, 5), with axis=-1(default) or axis=2
+            >>> shape(X) = (2, 3, 4, 5), shape(Y) = (3, 4), with axis=1
+            >>> shape(X) = (2, 3, 4, 5), shape(Y) = (2), with axis=0
+            >>> shape(X) = (2, 3, 4, 5), shape(Y) = (2, 1), with axis=0
 
     Args:
         x (Tensor): Tensor or LoDTensor of any dimensions. Its dtype should be int32, int64, float32, float64.
@@ -1179,14 +1179,14 @@ def logaddexp(x, y, name=None):
 
         For example:
 
-            .. code-block:: python
+        .. code-block:: python
 
-                >>> shape(X) = (2, 3, 4, 5), shape(Y) = (,)
-                >>> shape(X) = (2, 3, 4, 5), shape(Y) = (5,)
-                >>> shape(X) = (2, 3, 4, 5), shape(Y) = (4, 5), with axis=-1(default) or axis=2
-                >>> shape(X) = (2, 3, 4, 5), shape(Y) = (3, 4), with axis=1
-                >>> shape(X) = (2, 3, 4, 5), shape(Y) = (2), with axis=0
-                >>> shape(X) = (2, 3, 4, 5), shape(Y) = (2, 1), with axis=0
+            >>> shape(X) = (2, 3, 4, 5), shape(Y) = (,)
+            >>> shape(X) = (2, 3, 4, 5), shape(Y) = (5,)
+            >>> shape(X) = (2, 3, 4, 5), shape(Y) = (4, 5), with axis=-1(default) or axis=2
+            >>> shape(X) = (2, 3, 4, 5), shape(Y) = (3, 4), with axis=1
+            >>> shape(X) = (2, 3, 4, 5), shape(Y) = (2), with axis=0
+            >>> shape(X) = (2, 3, 4, 5), shape(Y) = (2, 1), with axis=0
 
     Args:
         x (Tensor): Tensor or LoDTensor of any dimensions. Its dtype should be int32, int64, float32, float64, float16.
@@ -2767,13 +2767,13 @@ def logsumexp(x, axis=None, keepdim=False, name=None):
 
     Examples:
 
-        .. code-block:: python
+    .. code-block:: python
 
-            >>> import paddle
+        >>> import paddle
 
-            >>> x = paddle.to_tensor([[-1.5, 0., 2.], [3., 1.2, -2.4]])
-            >>> out1 = paddle.logsumexp(x)    # 3.4691226
-            >>> out2 = paddle.logsumexp(x, 1) # [2.15317821, 3.15684602]
+        >>> x = paddle.to_tensor([[-1.5, 0., 2.], [3., 1.2, -2.4]])
+        >>> out1 = paddle.logsumexp(x)    # 3.4691226
+        >>> out2 = paddle.logsumexp(x, 1) # [2.15317821, 3.15684602]
 
     """
     reduce_all, axis = _get_reduce_axis(axis, x)
@@ -9461,7 +9461,7 @@ class Bilinear(Layer):
             >>> layer1 = paddle.rand((5, 5)).astype('float32')
             >>> layer2 = paddle.rand((5, 4)).astype('float32')
             >>> bilinear = paddle.nn.Bilinear(
-            >>> in1_features=5, in2_features=4, out_features=1000)
+            ...     in1_features=5, in2_features=4, out_features=1000)
             >>> result = bilinear(layer1,layer2)    # result shape [5, 1000]
 
     """
@@ -9994,24 +9994,24 @@ class ZeroPad2D(Layer):
     Examples:
         Examples are as follows.
 
-            .. code-block:: python
+        .. code-block:: python
 
-                >>> import paddle
-                >>> import paddle.nn as nn
+            >>> import paddle
+            >>> import paddle.nn as nn
 
-                >>> input_shape = paddle.to_tensor([1, 1, 2, 3])
-                >>> pad = [1, 0, 1, 2]
-                >>> data = paddle.arange(paddle.prod(input_shape), dtype="float32").reshape(input_shape) + 1
+            >>> input_shape = paddle.to_tensor([1, 1, 2, 3])
+            >>> pad = [1, 0, 1, 2]
+            >>> data = paddle.arange(paddle.prod(input_shape), dtype="float32").reshape(input_shape) + 1
 
-                >>> my_pad = nn.ZeroPad2D(padding=pad)
-                >>> result = my_pad(data)
+            >>> my_pad = nn.ZeroPad2D(padding=pad)
+            >>> result = my_pad(data)
 
-                >>> print(result)
-                >>> # [[[[0. 0. 0. 0.]
-                >>> #    [0. 1. 2. 3.]
-                >>> #    [0. 4. 5. 6.]
-                >>> #    [0. 0. 0. 0.]
-                >>> #    [0. 0. 0. 0.]]]]
+            >>> print(result)
+            >>> # [[[[0. 0. 0. 0.]
+            >>> #    [0. 1. 2. 3.]
+            >>> #    [0. 4. 5. 6.]
+            >>> #    [0. 0. 0. 0.]
+            >>> #    [0. 0. 0. 0.]]]]
     """
 
     def __init__(self, padding, data_format="NCHW", name=None):
