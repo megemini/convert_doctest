@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "convert_doctest"
+version = "0.0.1a0"
+description = "a script for convert doctest"
+readme = "README.md"
+requires-python = ">=3.8,<3.11"
+license = { file = "LICENSE" }
+
+[project.scripts]
+convert-doctest = "copy_preprocess:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["copy_preprocess.py"]

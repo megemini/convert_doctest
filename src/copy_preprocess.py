@@ -105,8 +105,7 @@ def convert_doctest(code_lines):
 
     return ''.join(results)
 
-
-if __name__ == '__main__':
+def main():
     source_file = sys.argv[1]
     target_file = source_file if len(sys.argv) < 3 else sys.argv[2]
 
@@ -115,3 +114,6 @@ if __name__ == '__main__':
 
     with open(target_file, 'w') as f:
         f.write(result)
+
+if __name__ == '__main__':
+    main()
