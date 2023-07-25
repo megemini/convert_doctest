@@ -15,4 +15,3 @@ convert-doctest = "copy_preprocess:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["copy_preprocess.py"]
