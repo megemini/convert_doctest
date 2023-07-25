@@ -13,6 +13,5 @@ license = { file = "LICENSE" }
 [project.scripts]
 convert-doctest = "copy_preprocess:main"
 
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["copy_preprocess.py"]
+[tool.setuptools]
+package-dir = { "" = "src" }
