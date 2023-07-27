@@ -1,5 +1,8 @@
 import sys
 import re
+import argparse
+
+from doctester import Xdoctester, logger, init_logger
 
 MIN_INDENT = 4
 STOP_CHAR = {'"""', "'''"}
@@ -109,15 +112,76 @@ def convert_doctest(code_lines):
 
     return ''.join(results)
 
+
+def extract_codeblock(code_lines):
+    pattern_docstring = re.compile(r'(\"{3})(.*?)(\"{3})', re.S)
+    pattern_codeblock = re.compile(r'\.\.\s+code\-block\:\:\s+python')
+
+    code = ''.join(code_lines)
+    for docstring_group in pattern_docstring.finditer(code):
+        
+        maybe_docstring = docstring_group.group()
+        match_codeblock = pattern_codeblock.search(maybe_docstring)
+        
+        if match_codeblock is not None:
+            group_start = docstring_group.start()
+            line_no = code[:group_start].count('\n') + 1
+            
+            yield maybe_docstring, line_no
+
+
+def run_doctest(file_path, **kwargs):
+
+    with open(file_path) as f:
+        codelines = f.readlines()
+    filename = file_path.rsplit('/', 1)[1]
+
+    debug = kwargs.pop('debug')
+    doctester = Xdoctester(debug=debug, verbose=3 if debug else 2)
+    for docstring, line_no in extract_codeblock(codelines):
+        docstring = doctester.convert_directive(docstring)
+        results = doctester.run('Test docstring from: file *{}* line number *{}*.'.format(filename, line_no), docstring)
+        logger.info(results)
+
+
+def parse_args():
+    """
+    Parse input arguments
+    """
+    parser = argparse.ArgumentParser(description='Convert and run sample code test')
+    parser.add_argument('--debug', dest='debug', action="store_true")
+    parser.add_argument('--convert', dest='convert', type=str, default='')
+    parser.add_argument('--target', dest='target', type=str, default='')
+    parser.add_argument('--run-test', dest='run_test', type=str, default='')
+
+    args = parser.parse_args()
+    return args
+
+
 def main():
-    source_file = sys.argv[1]
-    target_file = source_file if len(sys.argv) < 3 else sys.argv[2]
+    args = parse_args()
 
-    with open(source_file) as f:
-        result = convert_doctest(f.readlines())
+    init_logger(args.debug)
 
-    with open(target_file, 'w') as f:
-        f.write(result)
+    if args.convert:
+        source_file = args.convert
+        target_file = args.target or source_file
+
+        logger.info('-'*10 + 'Converting file' + '-'*10)
+        logger.info('Source file :' + source_file)
+        logger.info('Target file :' + target_file)
+
+        with open(source_file) as f:
+            result = convert_doctest(f.readlines())
+
+        with open(target_file, 'w') as f:
+            f.write(result)
+
+    if args.run_test:
+        logger.info('-'*10 + 'Running doctest' + '-'*10)
+        run_doctest(args.run_test, debug=args.debug)
+
 
 if __name__ == '__main__':
     main()
+
