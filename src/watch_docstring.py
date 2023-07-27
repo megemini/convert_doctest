@@ -9,6 +9,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Hashable, Iterable
 
+from doctester import Xdoctester
+
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -50,7 +52,7 @@ def hash_hex(value: Hashable) -> str:
 
 
 def make_relative_path(path: Path) -> Path:
-    return path.relative_to(Path(".").absolute())
+    return path.absolute().relative_to(Path(".").absolute())
 
 
 @dataclass(frozen=True)
@@ -150,6 +152,8 @@ def test_{name}_example_{i}():
     code_src = "{path}"
     code_src_with_lineno_and_offset = "{path}:{start.lineno}:{start.col_offset}"
 """
+
+    doctester = Xdoctester()
     content = path.read_text()
     for docstring in extract_docstrings(content, source_path=path):
         docstring_hash = hash_hex(docstring)
@@ -167,7 +171,7 @@ def test_{name}_example_{i}():
             template.format(
                 i=i,
                 name=docstring.name,
-                docstring=splited_doc,
+                docstring=doctester.convert_directive(splited_doc),
                 path=docstring.path,
                 start=docstring.start,
             )

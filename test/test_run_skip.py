@@ -7,6 +7,7 @@ def test(a):
 
             this is a test...
 
+            >>> # doctest: +SKIP
             >>> a = 3
             >>> print(a)
             3
@@ -26,15 +27,3 @@ def test(a):
 
     """
     pass
-
-def test():
-    """
-    >>> def func(x):
-    ...     if paddle.mean(x) < 0:
-    ...         x_v = x - 1
-    ...     else:
-    ...         x_v = x + 1
-    ...     return x_v
-    """
-    pass
-

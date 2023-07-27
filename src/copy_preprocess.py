@@ -114,7 +114,7 @@ def convert_doctest(code_lines):
 
 
 def extract_codeblock(code_lines):
-    pattern_docstring = re.compile(r'(\"{3})(.*?)(\"{3})', re.S)
+    pattern_docstring = re.compile(r'(\'{3}|\"{3})(.*?)(\'{3}|\"{3})', re.S)
     pattern_codeblock = re.compile(r'\.\.\s+code\-block\:\:\s+python')
 
     code = ''.join(code_lines)
@@ -131,7 +131,6 @@ def extract_codeblock(code_lines):
 
 
 def run_doctest(file_path, **kwargs):
-
     with open(file_path) as f:
         codelines = f.readlines()
     filename = file_path.rsplit('/', 1)[1]
@@ -144,42 +143,51 @@ def run_doctest(file_path, **kwargs):
         logger.info(results)
 
 
-def parse_args():
+def _run_convert(args):
+    source_file = args.source
+    target_file = args.target or source_file
+
+    logger.info('-'*10 + 'Converting file' + '-'*10)
+    logger.info('Source file :' + source_file)
+    logger.info('Target file :' + target_file)
+
+    with open(source_file) as f:
+        result = convert_doctest(f.readlines())
+
+    with open(target_file, 'w') as f:
+        f.write(result)
+
+    logger.info('-'*10 + 'Converting finish' + '-'*10)
+
+
+def _run_doctest(args):
+    logger.info('-'*10 + 'Running doctest' + '-'*10)
+    run_doctest(args.target, debug=args.debug)
+
+
+def main():
     """
     Parse input arguments
     """
     parser = argparse.ArgumentParser(description='Convert and run sample code test')
-    parser.add_argument('--debug', dest='debug', action="store_true")
-    parser.add_argument('--convert', dest='convert', type=str, default='')
-    parser.add_argument('--target', dest='target', type=str, default='')
-    parser.add_argument('--run-test', dest='run_test', type=str, default='')
+    parser.add_argument('--debug', action='store_true')
+    subparsers = parser.add_subparsers(help='sub-command help')
+
+    parser_convert = subparsers.add_parser('convert', help='convert code-block')
+    parser_doctest = subparsers.add_parser('doctest', help='test code-block')
+
+    parser_convert.add_argument('source', type=str, default='')
+    parser_convert.add_argument('--target', type=str, default='')
+    parser_convert.set_defaults(func=_run_convert)
+
+    parser_doctest.add_argument('target', type=str, default='')
+    parser_doctest.set_defaults(func=_run_doctest)
 
     args = parser.parse_args()
-    return args
-
-
-def main():
-    args = parse_args()
 
     init_logger(args.debug)
 
-    if args.convert:
-        source_file = args.convert
-        target_file = args.target or source_file
-
-        logger.info('-'*10 + 'Converting file' + '-'*10)
-        logger.info('Source file :' + source_file)
-        logger.info('Target file :' + target_file)
-
-        with open(source_file) as f:
-            result = convert_doctest(f.readlines())
-
-        with open(target_file, 'w') as f:
-            f.write(result)
-
-    if args.run_test:
-        logger.info('-'*10 + 'Running doctest' + '-'*10)
-        run_doctest(args.run_test, debug=args.debug)
+    args.func(args)
 
 
 if __name__ == '__main__':
