@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import ast
-import sys
+import re
 import time
 from dataclasses import dataclass
 from enum import Enum
@@ -99,6 +99,26 @@ def extract_docstrings(source: str, source_path: Path) -> Iterable[Docstring]:
                 )
 
 
+def split_docstring(docstring: Docstring) -> Iterable[str]:
+    code_block_pattern = re.compile(
+        r"(?P<prefix>\n\s+)\.\.\s+code-block::\s+python(?P<suffix>\s+)"
+    )
+
+    docstring_prefix = docstring.raw_value[:3]
+    split_flag = "_____s_p_l_i_t______"
+    is_first = True
+
+    def replace_code_block(match_obj: re.Match[str]) -> str:
+        nonlocal is_first
+        if is_first:
+            is_first = False
+            return match_obj.group(0)
+        return f"\n{match_obj.group('prefix')}{docstring_prefix}{split_flag}{docstring_prefix}.. code-block:: python{match_obj.group('suffix')}"
+
+    doc_with_flag = code_block_pattern.sub(replace_code_block, docstring.raw_value)
+    return doc_with_flag.split(split_flag)
+
+
 def clean_dir(path: Path):
     for child in path.iterdir():
         if child.is_dir():
@@ -125,7 +145,7 @@ def clean_xdoctest_test_dir():
 
 def copy_docstring_to_xdoctest_test_dir(path: Path):
     template = """
-def test_{name}():
+def test_{name}_example_{i}():
     {docstring}
     code_src = "{path}"
     code_src_with_lineno_and_offset = "{path}:{start.lineno}:{start.col_offset}"
@@ -142,14 +162,18 @@ def test_{name}():
         test_path.parent.mkdir(exist_ok=True)
         test_path_fake_init = test_path.parent / "__init__.py"
         test_path_fake_init.write_text("\n")
-        test_path.write_text(
+
+        test_contents = [
             template.format(
+                i=i,
                 name=docstring.name,
-                docstring=docstring.raw_value,
+                docstring=splited_doc,
                 path=docstring.path,
                 start=docstring.start,
             )
-        )
+            for i, splited_doc in enumerate(split_docstring(docstring))
+        ]
+        test_path.write_text("\n".join(test_contents))
 
 
 def copy_docstring_recursive(path: Path):
