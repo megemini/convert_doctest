@@ -22,6 +22,8 @@ $ pip install git+https://github.com/megemini/convert_doctest@main
 
 ## 使用方法
 
+首先使用 `convert-doctest` 将旧格式转换为新格式：
+
 ```shell
 $ convert-doctest source_file.py target_file.py
 ```
@@ -33,6 +35,18 @@ $ convert-doctest source_file.py
 ```
 
 `source_file.py` 和 `target_file.py` 是脚本转换的示例～
+
+之后运行 `watch-docstring` 监控该文件的修改（修改源文件，生成的文件会自动更新）
+
+```bash
+$ watch-docstring target_file.py
+```
+
+此时如果你修改文件的话，会生成一个 `xdoctest_test` 目录，里面包含了全部提取得到的 docstring，此时你只需要新开一个终端运行如下命令即可测试全部示例代码
+
+```bash
+$ xdoctest --global-exec "import paddle\npaddle.device.set_device('cpu')" xdoctest_test
+```
 
 ## 注意事项
 
