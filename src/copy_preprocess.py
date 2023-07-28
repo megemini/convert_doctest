@@ -144,10 +144,13 @@ def run_doctest(file_path, **kwargs):
 
     debug = kwargs.pop('debug')
     doctester = Xdoctester(debug=debug, verbose=3 if debug else 2)
+
+    results = []
     for docstring, line_no in extract_codeblock(codelines):
         docstring = doctester.convert_directive(docstring)
-        results = doctester.run('Test docstring from: file *{}* line number *{}*.'.format(filename, line_no), docstring)
-        logger.info(results)
+        results.extend(doctester.run('Test docstring from: file *{}* line number *{}*.'.format(filename, line_no), docstring))
+        
+    doctester.print_summary(results)
 
 
 def _run_convert(args):

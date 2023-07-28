@@ -327,16 +327,16 @@ class Xdoctester(DocTester):
 
         return test_results
 
-    def print_summary(self, test_results, whl_error):
+    def print_summary(self, test_results, whl_error=None):
         summary_success = []
         summary_failed = []
         summary_skiptest = []
         summary_nocodes = []
 
         stdout_handler = logging.StreamHandler(stream=sys.stdout)
-        logger.addHandler(stdout_handler)
+        # logger.addHandler(stdout_handler)
         logger.info("----------------End of the Check--------------------")
-        if len(whl_error) != 0:
+        if whl_error is not None:
             logger.info("%s is not in whl.", whl_error)
             logger.info("")
             logger.info("Please check the whl package and API_PR.spec!")
@@ -367,10 +367,6 @@ class Xdoctester(DocTester):
                         summary_skiptest.append(test_result.name)
 
                     if test_result.failed:
-                        logger.info(
-                            "In addition, mistakes found in sample codes: %s",
-                            test_result.name,
-                        )
                         summary_failed.append(test_result.name)
 
                     if test_result.time > TEST_TIMEOUT:
@@ -387,16 +383,18 @@ class Xdoctester(DocTester):
                         logger.info(f'{k} - {v}s')
             if len(summary_success):
                 logger.info("%d sample codes ran success", len(summary_success))
+                logger.info('\n'.join(summary_success))
+
             if len(summary_skiptest):
                 logger.info("%d sample codes skipped", len(summary_skiptest))
-                if self.debug:
-                    logger.info('\n'.join(summary_skiptest))
+                logger.info('\n'.join(summary_skiptest))
+
             if len(summary_nocodes):
                 logger.info(
-                    "%d apis don't have sample codes", len(summary_nocodes)
+                    "%d apis could not run test or don't have sample codes", len(summary_nocodes)
                 )
-                if self.debug:
-                    logger.info('\n'.join(summary_nocodes))
+                logger.info('\n'.join(summary_nocodes))
+
             if len(summary_failed):
                 logger.info("%d sample codes ran failed", len(summary_failed))
                 logger.info('\n'.join(summary_failed))
