@@ -87,6 +87,7 @@ def convert_doctest(code_lines):
             else:
                 raise
 
+        is_converted = linecont_lstrip[:4] in {'>>> ', '... '}
 
         if curr_state == TEXT:
             results.append(linecont)
@@ -98,10 +99,16 @@ def convert_doctest(code_lines):
             results.append(' '*curr_indent + linecont_lstrip)
 
         elif curr_state == CODE_PS1:
-            results.append((' '*curr_indent + '>>> ' + linecont_lstrip) if linecont_lstrip else '\n')
+            if is_converted:
+                results.append(' '*curr_indent + linecont_lstrip)
+            else:
+                results.append((' '*curr_indent + '>>> ' + linecont_lstrip) if linecont_lstrip else '\n')
 
         elif curr_state == CODE_PS2:
-            results.append(' '*curr_indent + '... ' + (linecont_lstrip if linecont_lstrip else '\n'))
+            if is_converted:
+                results.append(' '*curr_indent + linecont_lstrip)
+            else:
+                results.append(' '*curr_indent + '... ' + (linecont_lstrip if linecont_lstrip else '\n'))
 
         else:
             raise
