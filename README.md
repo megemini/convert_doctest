@@ -56,7 +56,7 @@ $ watch-docstring target_file.py
 
 ```bash
 $ xdoctest \
-  --options "+IGNORE_WHITESPACE" \
+  --debug --options "+IGNORE_WHITESPACE" --style "freeform" \
   --global-exec "import paddle\npaddle.device.set_device('cpu')" \
   xdoctest_test
 ```
