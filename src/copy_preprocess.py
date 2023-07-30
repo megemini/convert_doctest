@@ -140,7 +140,7 @@ def extract_codeblock(code_lines):
 def run_doctest(file_path, **kwargs):
     with open(file_path) as f:
         codelines = f.readlines()
-    filename = file_path.rsplit('/', 1)[1]
+    filename = file_path.rsplit('/', 1)[1] if '/' in file_path else file_path
 
     debug = kwargs.pop('debug')
     doctester = Xdoctester(debug=debug, verbose=3 if debug else 2)
