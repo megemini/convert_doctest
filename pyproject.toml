@@ -9,7 +9,10 @@ description = "a script for convert doctest"
 readme = "README.md"
 requires-python = ">=3.8,<3.11"
 license = { file = "LICENSE" }
-dependencies = ["watchdog"]
+dependencies = [
+    "watchdog",
+    "xdoctest"
+]
 
 [project.scripts]
 convert-doctest = "copy_preprocess:main"
