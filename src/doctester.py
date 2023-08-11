@@ -423,7 +423,7 @@ class Xdoctester(DocTester):
                     passed=result['passed'],
                     skipped=result['skipped'],
                     failed=result['failed'],
-                    test_msg=result['exc_info'],
+                    test_msg=str(result['exc_info']),
                     time=end_time - start_time,
                 )
             )
