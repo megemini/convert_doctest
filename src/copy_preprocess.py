@@ -6,7 +6,7 @@ import argparse
 
 from doctester import Xdoctester, logger, init_logger
 
-USE_MULTI_PROCESSING = True
+USE_MULTI_PROCESSING = False
 MIN_INDENT = 4
 STOP_CHAR = {'"""', "'''"}
 
