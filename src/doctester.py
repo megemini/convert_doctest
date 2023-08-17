@@ -310,6 +310,7 @@ class Xdoctester(DocTester):
         patch_global_state=True,
         patch_tensor_place=True,
         patch_float_precision=5,
+        use_multiprocessing=True,
         **config,
     ):
         self.debug = debug
@@ -323,6 +324,7 @@ class Xdoctester(DocTester):
         self._patch_global_state = patch_global_state
         self._patch_tensor_place = patch_tensor_place
         self._patch_float_precision = patch_float_precision
+        self._use_multiprocessing = use_multiprocessing
 
         self.docstring_parser = functools.partial(
             xdoctest.core.parse_docstr_examples, style=self.style
@@ -348,7 +350,6 @@ class Xdoctester(DocTester):
 
         if self._patch_float_precision is not None:
             _patch_float_precision(self._patch_float_precision)
-
 
     def convert_directive(self, docstring: str) -> str:
         """Replace directive prefix with xdoctest"""
@@ -390,21 +391,7 @@ class Xdoctester(DocTester):
         examples_to_test, examples_nocode = self._extract_examples(
             api_name, docstring
         )
-
-        # use `spawn`
-        ctx = multiprocessing.get_context('spawn')
-        queue = ctx.Queue()
-        process = ctx.Process(
-            target=self._execute_xdoctest, 
-            args=(
-                queue, 
-                examples_to_test, 
-                examples_nocode, 
-                ))
-        process.start()
-        process.join()
-
-        return queue.get()
+        return self._execute_xdoctest(examples_to_test, examples_nocode)
 
     def _extract_examples(self, api_name, docstring):
         """Extract code block examples from docstring."""
@@ -429,7 +416,28 @@ class Xdoctester(DocTester):
 
         return examples_to_test, examples_nocode
 
-    def _execute_xdoctest(self, queue, examples_to_test, examples_nocode):
+    def _execute_xdoctest(self, examples_to_test, examples_nocode):
+        if self._use_multiprocessing:
+            # use `spawn` instead of `fork`
+            ctx = multiprocessing.get_context('spawn')
+            queue = ctx.Queue()
+            process = ctx.Process(
+                target=self._execute_with_queue,
+                args=(
+                    queue,
+                    examples_to_test,
+                    examples_nocode,
+                ),
+            )
+            process.start()
+            process.join()
+
+            return queue.get()
+
+        else:
+            return self._execute(examples_to_test, examples_nocode)
+
+    def _execute(self, examples_to_test, examples_nocode):
         """Run xdoctest for each example"""
         # patch xdoctest first in each process
         self._patch_xdoctest()
@@ -455,7 +463,10 @@ class Xdoctester(DocTester):
         for _, example in examples_nocode.items():
             test_results.append(TestResult(name=str(example), nocode=True))
 
-        queue.put(test_results)
+        return test_results
+
+    def _execute_with_queue(self, queue, examples_to_test, examples_nocode):
+        queue.put(self._execute(examples_to_test, examples_nocode))
 
     def print_summary(self, test_results, whl_error=None):
         summary_success = []
