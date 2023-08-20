@@ -1,6 +1,6 @@
 # from Paddle tools
 
-import collections
+import dataclasses
 import time
 import typing
 import functools
@@ -8,10 +8,12 @@ import logging
 import multiprocessing
 import os
 import platform
+import queue
 import re
 import sys
 import time
 import typing
+import threading
 
 import xdoctest
 
@@ -174,20 +176,17 @@ def init_logger(debug=True, log_file=None):
         logger.addHandler(logfHandler)
 
 
-TestResult = collections.namedtuple(
-    "TestResult",
-    (
-        "name",
-        "nocode",
-        "passed",
-        "skipped",
-        "failed",
-        "time",
-        "test_msg",
-        "extra_info",
-    ),
-    defaults=(None, False, False, False, False, -1, "", None),
-)
+@dataclasses.dataclass
+class TestResult:
+    name: str
+    nocode: bool = False
+    passed: bool = False
+    skipped: bool = False
+    failed: bool = False
+    timeout: bool = False
+    time: float = float('inf')
+    test_msg: str = ""
+    extra_info: str = ""
 
 
 class DocTester:
@@ -208,18 +207,20 @@ class DocTester:
                 If the `style` is set to `google` and `target` is set to `codeblock`, we should implement/overwrite `ensemble_docstring` method,
                 where ensemble the codeblock into a docstring with a `Examples:` and some indents as least.
         directives(list[str]): `DocTester` hold the default directives, we can/should replace them with method `convert_directive`.
+            For example:
+            ``` text
+            # doctest: +SKIP
+            # doctest: +REQUIRES(env:CPU)
+            # doctest: +REQUIRES(env:GPU)
+            # doctest: +REQUIRES(env:XPU)
+            # doctest: +REQUIRES(env:DISTRIBUTED)
+            # doctest: +REQUIRES(env:GPU, env:XPU)
+            ```
     """
 
     style = 'google'
     target = 'docstring'
-    directives = [
-        "# doctest: +SKIP",
-        "# doctest: +REQUIRES(env:CPU)",
-        "# doctest: +REQUIRES(env:GPU)",
-        "# doctest: +REQUIRES(env:XPU)",
-        "# doctest: +REQUIRES(env:DISTRIBUTED)",
-        "# doctest: +REQUIRES(env:GPU, env:XPU)",
-    ]
+    directives = None
 
     def ensemble_docstring(self, codeblock: str) -> str:
         """Ensemble a cleaned codeblock into a docstring.
@@ -297,8 +298,59 @@ class DocTester:
         pass
 
 
+class Directive:
+    """Base class of global direvtives just for `xdoctest`.
+    """
+    pattern: typing.Pattern
+
+    def parse_directive(self, docstring: str) -> typing.Tuple[str, typing.Any]:
+        pass
+
+
+class TimeoutDirective(Directive):
+    
+    pattern = re.compile(
+        r"""
+        (?:
+            (?:
+                \s*\>{3}\s*\#\s*x?doctest\:\s*
+            )
+            (?P<op>[\+\-])
+            (?:
+                TIMEOUT
+            )
+            \(
+                (?P<time>\d+)
+            \)
+            (?:
+                \s*?
+            )
+        )
+        """,
+        re.X | re.S,
+    )
+    
+    def __init__(self, timeout):
+        self._timeout = timeout
+
+    def parse_directive(self, docstring):
+        match_obj = self.pattern.search(docstring)
+        if match_obj is not None:
+            op_time = match_obj.group('time')
+            match_start = match_obj.start()
+            match_end = match_obj.end()
+
+            return docstring[:match_start] + '\n' + docstring[match_end:], float(op_time)
+
+        return docstring, float(self._timeout)
+
+
 class Xdoctester(DocTester):
     """A Xdoctest doctester."""
+    
+    directives: typing.Dict[str, typing.Tuple[typing.Type[Directive], ...]] = {
+        'timeout': (TimeoutDirective, TEST_TIMEOUT)
+    }
 
     def __init__(
         self,
@@ -351,6 +403,14 @@ class Xdoctester(DocTester):
         if self._patch_float_precision is not None:
             _patch_float_precision(self._patch_float_precision)
 
+    def _parse_directive(self, docstring: str) -> typing.Tuple[str, typing.Dict[str, Directive]]:
+        directives = {}
+        for name, directive_cls in self.directives.items():
+            docstring, direct = directive_cls[0](*directive_cls[1:]).parse_directive(docstring)
+            directives[name] = direct
+
+        return docstring, directives
+
     def convert_directive(self, docstring: str) -> str:
         """Replace directive prefix with xdoctest"""
         return self.directive_pattern.sub(self.directive_prefix, docstring)
@@ -388,12 +448,29 @@ class Xdoctester(DocTester):
 
     def run(self, api_name: str, docstring: str) -> typing.List[TestResult]:
         """Run the xdoctest with a docstring."""
-        examples_to_test, examples_nocode = self._extract_examples(
-            api_name, docstring
-        )
-        return self._execute_xdoctest(examples_to_test, examples_nocode)
+        # parse global directive
+        docstring, directives = self._parse_directive(docstring)
 
-    def _extract_examples(self, api_name, docstring):
+        # extract xdoctest examples
+        examples_to_test, examples_nocode = self._extract_examples(
+            api_name, docstring, **directives
+        )
+
+        # run xdoctest
+        try:
+            result = self._execute_xdoctest(examples_to_test, examples_nocode, **directives)
+        except queue.Empty:
+            result = [
+                TestResult(
+                    name=api_name,
+                    timeout=True,
+                    time=directives.get('timeout', TEST_TIMEOUT),
+                )
+            ]
+
+        return result
+
+    def _extract_examples(self, api_name, docstring, **directives):
         """Extract code block examples from docstring."""
         examples_to_test = {}
         examples_nocode = {}
@@ -416,26 +493,29 @@ class Xdoctester(DocTester):
 
         return examples_to_test, examples_nocode
 
-    def _execute_xdoctest(self, examples_to_test, examples_nocode):
+    def _execute_xdoctest(self, examples_to_test, examples_nocode, **directives):
         if self._use_multiprocessing:
-            # use `spawn` instead of `fork`
-            ctx = multiprocessing.get_context('spawn')
-            queue = ctx.Queue()
-            process = ctx.Process(
-                target=self._execute_with_queue,
-                args=(
-                    queue,
-                    examples_to_test,
-                    examples_nocode,
-                ),
-            )
-            process.start()
-            process.join()
-
-            return queue.get()
-
+            _ctx = multiprocessing.get_context('spawn')
+            result_queue = _ctx.Queue()
+            exec_processer = functools.partial(_ctx.Process, daemon=True)
         else:
-            return self._execute(examples_to_test, examples_nocode)
+            result_queue = queue.Queue()
+            exec_processer = functools.partial(threading.Thread, daemon=True)
+
+        processer = exec_processer(
+            target=self._execute_with_queue,
+            args=(
+                result_queue,
+                examples_to_test,
+                examples_nocode,
+            )
+        )
+
+        processer.start()
+        result = result_queue.get(timeout=directives.get('timeout', TEST_TIMEOUT))
+        processer.join()
+
+        return result
 
     def _execute(self, examples_to_test, examples_nocode):
         """Run xdoctest for each example"""
@@ -472,6 +552,7 @@ class Xdoctester(DocTester):
         summary_success = []
         summary_failed = []
         summary_skiptest = []
+        summary_timeout = []
         summary_nocodes = []
 
         # stdout_handler = logging.StreamHandler(stream=sys.stdout)
@@ -498,7 +579,6 @@ class Xdoctester(DocTester):
             logger.info("----------------------------------------------------")
             sys.exit(1)
         else:
-            timeovered_test = {}
             for test_result in test_results:
                 if not test_result.nocode:
                     if test_result.passed:
@@ -510,18 +590,14 @@ class Xdoctester(DocTester):
                     if test_result.failed:
                         summary_failed.append(test_result.name)
 
-                    if test_result.time > TEST_TIMEOUT:
-                        timeovered_test[test_result.name] = test_result.time
+                    if test_result.timeout:
+                        summary_timeout.append({
+                            'api_name': test_result.name,
+                            'run_time': test_result.time
+                        })
                 else:
                     summary_nocodes.append(test_result.name)
 
-            if len(timeovered_test):
-                logger.info(
-                    "%d sample codes ran time over 10s", len(timeovered_test)
-                )
-                if self.debug:
-                    for k, v in timeovered_test.items():
-                        logger.info(f'{k} - {v}s')
             if len(summary_success):
                 logger.info("%d sample codes ran success", len(summary_success))
                 logger.info('\n'.join(summary_success))
@@ -537,6 +613,13 @@ class Xdoctester(DocTester):
                 )
                 logger.info('\n'.join(summary_nocodes))
 
+            if len(summary_timeout):
+                logger.info(
+                    "%d sample codes ran timeout", len(summary_timeout)
+                )
+                for _result in summary_timeout:
+                    logger.info(f"{_result['api_name']} - more than {_result['run_time']}s")
+
             if len(summary_failed):
                 logger.info("%d sample codes ran failed", len(summary_failed))
                 logger.info('\n'.join(summary_failed))
@@ -546,4 +629,5 @@ class Xdoctester(DocTester):
                 sys.exit(1)
 
         logger.info("Sample code check is successful!")
+
 
