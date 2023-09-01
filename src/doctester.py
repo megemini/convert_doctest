@@ -352,7 +352,7 @@ class TimeoutDirective(Directive):
 
 class Xdoctester(DocTester):
     """A Xdoctest doctester."""
-    
+
     directives: typing.Dict[str, typing.Tuple[typing.Type[Directive], ...]] = {
         'timeout': (TimeoutDirective, TEST_TIMEOUT)
     }
@@ -377,11 +377,15 @@ class Xdoctester(DocTester):
         self.mode = mode
         self.verbose = verbose
         self.config = {**XDOCTEST_CONFIG, **(config or {})}
+        self._test_capacity = {}
 
         self._patch_global_state = patch_global_state
         self._patch_tensor_place = patch_tensor_place
         self._patch_float_precision = patch_float_precision
         self._use_multiprocessing = use_multiprocessing
+
+        # patch xdoctest before `xdoctest.core.parse_docstr_examples`
+        self._patch_xdoctest()
 
         self.docstring_parser = functools.partial(
             xdoctest.core.parse_docstr_examples, style=self.style
@@ -408,10 +412,14 @@ class Xdoctester(DocTester):
         if self._patch_float_precision is not None:
             _patch_float_precision(self._patch_float_precision)
 
-    def _parse_directive(self, docstring: str) -> typing.Tuple[str, typing.Dict[str, Directive]]:
+    def _parse_directive(
+        self, docstring: str
+    ) -> typing.Tuple[str, typing.Dict[str, Directive]]:
         directives = {}
         for name, directive_cls in self.directives.items():
-            docstring, direct = directive_cls[0](*directive_cls[1:]).parse_directive(docstring)
+            docstring, direct = directive_cls[0](
+                *directive_cls[1:]
+            ).parse_directive(docstring)
             directives[name] = direct
 
         return docstring, directives
@@ -451,6 +459,8 @@ class Xdoctester(DocTester):
         logger.info("running under python %s", platform.python_version())
         logger.info("running under xdoctest %s", xdoctest.__version__)
 
+        self._test_capacity = test_capacity
+
     def run(self, api_name: str, docstring: str) -> typing.List[TestResult]:
         """Run the xdoctest with a docstring."""
         # parse global directive
@@ -463,7 +473,9 @@ class Xdoctester(DocTester):
 
         # run xdoctest
         try:
-            result = self._execute_xdoctest(examples_to_test, examples_nocode, **directives)
+            result = self._execute_xdoctest(
+                examples_to_test, examples_nocode, **directives
+            )
         except queue.Empty:
             result = [
                 TestResult(
@@ -498,7 +510,9 @@ class Xdoctester(DocTester):
 
         return examples_to_test, examples_nocode
 
-    def _execute_xdoctest(self, examples_to_test, examples_nocode, **directives):
+    def _execute_xdoctest(
+        self, examples_to_test, examples_nocode, **directives
+    ):
         if self._use_multiprocessing:
             _ctx = multiprocessing.get_context('spawn')
             result_queue = _ctx.Queue()
@@ -513,11 +527,13 @@ class Xdoctester(DocTester):
                 result_queue,
                 examples_to_test,
                 examples_nocode,
-            )
+            ),
         )
 
         processer.start()
-        result = result_queue.get(timeout=directives.get('timeout', TEST_TIMEOUT))
+        result = result_queue.get(
+            timeout=directives.get('timeout', TEST_TIMEOUT)
+        )
         processer.join()
 
         return result
@@ -563,6 +579,7 @@ class Xdoctester(DocTester):
         # stdout_handler = logging.StreamHandler(stream=sys.stdout)
         # logger.addHandler(stdout_handler)
         logger.info("----------------Check results--------------------")
+        logger.info(">>> Sample code test capacity: %s", self._test_capacity)
 
         if whl_error is not None and whl_error:
             logger.info("%s is not in whl.", whl_error)
