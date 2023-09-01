@@ -157,6 +157,11 @@ def _patch_float_precision(digits):
     checker.check_output = check_output
 
 
+def log_exit(arg=None):
+    logger.info("----------------End of the Check--------------------")
+    sys.exit(arg)
+
+
 def init_logger(debug=True, log_file=None):
     """
     init logger level and file handler
@@ -557,7 +562,8 @@ class Xdoctester(DocTester):
 
         # stdout_handler = logging.StreamHandler(stream=sys.stdout)
         # logger.addHandler(stdout_handler)
-        logger.info("----------------End of the Check--------------------")
+        logger.info("----------------Check results--------------------")
+
         if whl_error is not None and whl_error:
             logger.info("%s is not in whl.", whl_error)
             logger.info("")
@@ -576,8 +582,8 @@ class Xdoctester(DocTester):
                         "In addition, mistakes found in sample codes: %s",
                         test_result.name,
                     )
-            logger.info("----------------------------------------------------")
-            sys.exit(1)
+            log_exit(1)
+
         else:
             for test_result in test_results:
                 if not test_result.nocode:
@@ -591,43 +597,54 @@ class Xdoctester(DocTester):
                         summary_failed.append(test_result.name)
 
                     if test_result.timeout:
-                        summary_timeout.append({
-                            'api_name': test_result.name,
-                            'run_time': test_result.time
-                        })
+                        summary_timeout.append(
+                            {
+                                'api_name': test_result.name,
+                                'run_time': test_result.time,
+                            }
+                        )
                 else:
                     summary_nocodes.append(test_result.name)
 
             if len(summary_success):
-                logger.info("%d sample codes ran success", len(summary_success))
+                logger.info(
+                    ">>> %d sample codes ran success", len(summary_success)
+                )
                 logger.info('\n'.join(summary_success))
 
             if len(summary_skiptest):
-                logger.info("%d sample codes skipped", len(summary_skiptest))
+                logger.info(
+                    ">>> %d sample codes skipped", len(summary_skiptest)
+                )
                 logger.info('\n'.join(summary_skiptest))
 
             if len(summary_nocodes):
                 logger.info(
-                    "%d apis could not run test or don't have sample codes",
+                    ">>> %d apis could not run test or don't have sample codes",
                     len(summary_nocodes),
                 )
                 logger.info('\n'.join(summary_nocodes))
 
             if len(summary_timeout):
                 logger.info(
-                    "%d sample codes ran timeout", len(summary_timeout)
+                    ">>> %d sample codes ran timeout", len(summary_timeout)
                 )
                 for _result in summary_timeout:
-                    logger.info(f"{_result['api_name']} - more than {_result['run_time']}s")
+                    logger.info(
+                        f"{_result['api_name']} - more than {_result['run_time']}s"
+                    )
 
             if len(summary_failed):
-                logger.info("%d sample codes ran failed", len(summary_failed))
+                logger.info(
+                    ">>> %d sample codes ran failed", len(summary_failed)
+                )
                 logger.info('\n'.join(summary_failed))
+
+            if summary_failed or summary_timeout or summary_nocodes:
                 logger.info(
                     "Mistakes found in sample codes. Please recheck the sample codes."
                 )
-                sys.exit(1)
+                log_exit(1)
 
         logger.info("Sample code check is successful!")
-
-
+        logger.info("----------------End of the Check--------------------")
