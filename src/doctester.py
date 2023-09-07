@@ -350,11 +350,28 @@ class TimeoutDirective(Directive):
         return docstring, float(self._timeout)
 
 
+class _Statement:
+    pattern: typing.Pattern
+
+    def __str__(self) -> str:
+        raise NotImplementedError
+
+class _Fluid(_Statement):
+    pattern = re.compile(r'\bfluid\b')
+
+    def __str__(self) -> str:
+        return 'Please do NOT use `fluid`.'
+
+
 class Xdoctester(DocTester):
     """A Xdoctest doctester."""
 
     directives: typing.Dict[str, typing.Tuple[typing.Type[Directive], ...]] = {
         'timeout': (TimeoutDirective, TEST_TIMEOUT)
+    }
+
+    bad_statements: typing.Dict[str, _Statement] = {
+        'fluid': _Fluid()
     }
 
     def __init__(
@@ -461,8 +478,30 @@ class Xdoctester(DocTester):
 
         self._test_capacity = test_capacity
 
+    def _check_bad_statements(self, docstring: str) -> typing.Set[str]:
+        bad_results = set()
+        for name, statement in self.bad_statements.items():
+            match_obj = statement.pattern.search(docstring)
+            if match_obj is not None:
+                bad_results.add(name)
+
+        return bad_results
+
     def run(self, api_name: str, docstring: str) -> typing.List[TestResult]:
         """Run the xdoctest with a docstring."""
+        # check bad statements first
+        bad_results = self._check_bad_statements(docstring)
+        if bad_results:
+            for name in bad_results:
+                logger.warning("%s %s", api_name, str(self.bad_statements[name]))
+
+            return [
+                TestResult(
+                    name=api_name,
+                    nocode=True,
+                )
+            ]
+
         # parse global directive
         docstring, directives = self._parse_directive(docstring)
 
@@ -569,6 +608,7 @@ class Xdoctester(DocTester):
     def _execute_with_queue(self, queue, examples_to_test, examples_nocode):
         queue.put(self._execute(examples_to_test, examples_nocode))
 
+
     def print_summary(self, test_results, whl_error=None):
         summary_success = []
         summary_failed = []
@@ -576,26 +616,26 @@ class Xdoctester(DocTester):
         summary_timeout = []
         summary_nocodes = []
 
-        # stdout_handler = logging.StreamHandler(stream=sys.stdout)
-        # logger.addHandler(stdout_handler)
-        logger.info("----------------Check results--------------------")
-        logger.info(">>> Sample code test capacity: %s", self._test_capacity)
+        logger.warning("----------------Check results--------------------")
+        logger.warning(">>> Sample code test capacity: %s", self._test_capacity)
 
         if whl_error is not None and whl_error:
-            logger.info("%s is not in whl.", whl_error)
-            logger.info("")
-            logger.info("Please check the whl package and API_PR.spec!")
-            logger.info(
+            logger.warning("%s is not in whl.", whl_error)
+            logger.warning("")
+            logger.warning("Please check the whl package and API_PR.spec!")
+            logger.warning(
                 "You can follow these steps in order to generate API.spec:"
             )
-            logger.info("1. cd ${paddle_path}, compile paddle;")
-            logger.info("2. pip install build/python/dist/(build whl package);")
-            logger.info(
+            logger.warning("1. cd ${paddle_path}, compile paddle;")
+            logger.warning(
+                "2. pip install build/python/dist/(build whl package);"
+            )
+            logger.warning(
                 "3. run 'python tools/print_signatures.py paddle > paddle/fluid/API.spec'."
             )
             for test_result in test_results:
                 if test_result.failed:
-                    logger.info(
+                    logger.error(
                         "In addition, mistakes found in sample codes: %s",
                         test_result.name,
                     )
@@ -625,43 +665,57 @@ class Xdoctester(DocTester):
 
             if len(summary_success):
                 logger.info(
-                    ">>> %d sample codes ran success", len(summary_success)
+                    ">>> %d sample codes ran success in env: %s",
+                    len(summary_success),
+                    self._test_capacity,
                 )
                 logger.info('\n'.join(summary_success))
 
             if len(summary_skiptest):
-                logger.info(
-                    ">>> %d sample codes skipped", len(summary_skiptest)
+                logger.warning(
+                    ">>> %d sample codes skipped in env: %s",
+                    len(summary_skiptest),
+                    self._test_capacity,
                 )
-                logger.info('\n'.join(summary_skiptest))
+                logger.warning('\n'.join(summary_skiptest))
 
             if len(summary_nocodes):
-                logger.info(
-                    ">>> %d apis could not run test or don't have sample codes",
+                logger.error(
+                    ">>> %d apis don't have sample codes or could not run test in env: %s",
                     len(summary_nocodes),
+                    self._test_capacity,
                 )
-                logger.info('\n'.join(summary_nocodes))
+                logger.error('\n'.join(summary_nocodes))
 
             if len(summary_timeout):
-                logger.info(
-                    ">>> %d sample codes ran timeout", len(summary_timeout)
+                logger.error(
+                    ">>> %d sample codes ran timeout or error in env: %s",
+                    len(summary_timeout),
+                    self._test_capacity,
                 )
                 for _result in summary_timeout:
-                    logger.info(
+                    logger.error(
                         f"{_result['api_name']} - more than {_result['run_time']}s"
                     )
 
             if len(summary_failed):
-                logger.info(
-                    ">>> %d sample codes ran failed", len(summary_failed)
+                logger.error(
+                    ">>> %d sample codes ran failed in env: %s",
+                    len(summary_failed),
+                    self._test_capacity,
                 )
-                logger.info('\n'.join(summary_failed))
+                logger.error('\n'.join(summary_failed))
 
             if summary_failed or summary_timeout or summary_nocodes:
-                logger.info(
-                    "Mistakes found in sample codes. Please recheck the sample codes."
+                logger.warning(
+                    ">>> Mistakes found in sample codes in env: %s!",
+                    self._test_capacity,
                 )
+                logger.warning(">>> Please recheck the sample codes.")
                 log_exit(1)
 
-        logger.info("Sample code check is successful!")
-        logger.info("----------------End of the Check--------------------")
+        logger.warning(
+            ">>> Sample code check is successful in env: %s!",
+            self._test_capacity,
+        )
+        logger.warning("----------------End of the Check--------------------")
