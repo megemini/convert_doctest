@@ -254,7 +254,7 @@ def extract_code_blocks_from_docstr(docstr, google_style=True):
 
 
 def extract_codeblock(code_lines):
-    pattern_docstring = re.compile(r'(\'{3}|\"{3})(.*?)(\'{3}|\"{3})', re.S)
+    pattern_docstring = re.compile(r'(\'{3}|\"{3}|(DOC\())(.*?)(\'{3}|\"{3}|(\)DOC))', re.S)
     pattern_codeblock = re.compile(r'\.\.\s+code\-block\:\:\s+python')
 
     code = ''.join(code_lines)
