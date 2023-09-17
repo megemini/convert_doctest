@@ -281,7 +281,7 @@ def run_doctest(file_path, **kwargs):
 
     docstrings = []
     for docstring, line_no in extract_codeblock(codelines):
-        docstring = doctester.convert_directive(docstring)
+        docstring = doctester.convert_directive('\n'+docstring.strip()+'\n')
         docstrings.append(('Test docstring from: file *{}* line number *{}*.'.format(filename, line_no), docstring))
 
     test_results = []

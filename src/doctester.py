@@ -1,6 +1,6 @@
 # from Paddle tools
 
-import dataclasses
+import collections
 import time
 import typing
 import functools
@@ -181,17 +181,162 @@ def init_logger(debug=True, log_file=None):
         logger.addHandler(logfHandler)
 
 
-@dataclasses.dataclass
+
+class Result:
+    # name/key for result
+    name: str = ''
+
+    # default value
+    default: bool = False
+
+    # is failed result or not
+    is_fail: bool = False
+
+    # logging
+    logger: typing.Callable = logger.info
+
+    # logging print order(not logging level, just for convenient)
+    order: int = 0
+
+    @classmethod
+    def msg(cls, count: int, env: typing.Set) -> str:
+        """ Message for logging with api `count` and running `env`.
+        """
+        raise NotImplementedError
+    
+
+class MetaResult(type):
+    """ A meta class to record `Result` subclasses.
+    """
+
+    __slots__ = ()
+
+    # hold result cls
+    __cls_map = {}
+
+    # result added order
+    __order = 0
+
+    def __new__(
+        mcs, name: str, bases: typing.Tuple[type, ...], namespace: typing.Dict[str, typing.Any]
+    ) -> type:
+        cls = super().__new__(mcs, name, bases, namespace)
+        if issubclass(cls, Result):
+            # set cls order as added to Meta
+            cls.order = mcs.__order
+            mcs.__order += 1
+
+            # put cls into Meta's map
+            mcs.__cls_map[namespace.get('name')] = cls
+
+        return cls
+
+    @classmethod
+    def get(mcs, name: str) -> type:
+        return mcs.__cls_map.get(name)
+    
+    @classmethod
+    def cls_map(mcs) -> typing.Dict[str, Result]:
+        return mcs.__cls_map
+
+
+class Passed(Result, metaclass=MetaResult):
+    name = 'passed'
+    is_fail = False
+
+    @classmethod
+    def msg(cls, count, env):
+        return f">>> {count} sample codes ran success in env: {env}"
+
+
+class Skipped(Result, metaclass=MetaResult):
+    name = 'skipped'
+    is_fail = False
+    logger = logger.warning
+
+    @classmethod
+    def msg(cls, count, env):
+        return f">>> {count} sample codes skipped in env: {env}"
+
+
+class Failed(Result, metaclass=MetaResult):
+    name = 'failed'
+    is_fail = True
+    logger = logger.error
+
+    @classmethod
+    def msg(cls, count, env):
+        return f">>> {count} sample codes ran failed in env: {env}"
+
+
+class NoCode(Result, metaclass=MetaResult):
+    name = 'nocode'
+    is_fail = True
+    logger = logger.error
+
+    @classmethod
+    def msg(cls, count, env):
+        return f">>> {count} apis don't have sample codes or could not run test in env: {env}"
+
+
+class Timeout(Result, metaclass=MetaResult):
+    name = 'timeout'
+    is_fail = True
+    logger = logger.error
+
+    @classmethod
+    def msg(cls, count, env):
+        return f">>> {count} sample codes ran timeout or error in env: {env}"
+    
+
+class BadStatement(Result, metaclass=MetaResult):
+    name = 'badstatement'
+    is_fail = True
+    logger = logger.error
+
+    @classmethod
+    def msg(cls, count, env):
+        return f">>> {count} bad statements detected in sample codes in env: {env}"
+
+
 class TestResult:
-    name: str
-    nocode: bool = False
-    passed: bool = False
-    skipped: bool = False
-    failed: bool = False
-    timeout: bool = False
+    name: str = ""
     time: float = float('inf')
     test_msg: str = ""
     extra_info: str = ""
+
+    # there should be only one result be True.
+    __unique_state: Result = None
+
+    def __init__(self, **kwargs) -> None:
+        # set all attr from metaclass
+        for result_name, result_cls in MetaResult.cls_map().items():
+            setattr(self, result_name, result_cls.default)
+
+        # overwrite attr from kwargs
+        for name, value in kwargs.items():
+            # check attr name
+            if not (hasattr(self, name) or name in MetaResult.cls_map()):
+                raise KeyError('`{}` is not a valid result type.'.format(name))
+
+            setattr(self, name, value)
+
+            if name in MetaResult.cls_map() and value:
+                if self.__unique_state is not None:
+                    logger.warning('Only one result state should be True.')
+                
+                self.__unique_state = MetaResult.get(name)
+
+        if self.__unique_state is None:
+            logger.warning('Default result will be set to FAILED!')
+            self.__unique_state = Failed
+
+    @property
+    def state(self) -> Result:
+        return self.__unique_state
+
+    def __str__(self) -> str:
+        return '{}, running time: {:.3f}s'.format(self.name, self.time)
 
 
 class DocTester:
@@ -350,17 +495,55 @@ class TimeoutDirective(Directive):
         return docstring, float(self._timeout)
 
 
-class _Statement:
-    pattern: typing.Pattern
+class BadStatement:
+    msg: str = ''
 
-    def __str__(self) -> str:
+    def check(self, docstring: str) -> bool:
         raise NotImplementedError
 
-class _Fluid(_Statement):
-    pattern = re.compile(r'\bfluid\b')
 
-    def __str__(self) -> str:
-        return 'Please do NOT use `fluid`.'
+class Fluid(BadStatement):
+    msg = 'Please do NOT use `fluid` api.'
+
+    _pattern = re.compile(
+        r"""
+        (\>{3}|.{3})
+        \s*
+        (import|from)
+        .*
+        (\bfluid\b)
+        """,
+        re.X,
+    )
+
+    def check(self, docstring):
+        return bool(self._pattern.search(docstring))
+
+
+class SkipNoReason(BadStatement):
+    msg = 'Please add sample code skip reason.'
+
+    _pattern = re.compile(
+        r"""
+        \#
+        \s*
+        (x?doctest:)
+        \s*
+        [+]SKIP
+        (?P<reason>.*)
+        """,
+        re.X,
+    )
+
+    def check(self, docstring):
+        for match_obj in self._pattern.finditer(docstring):
+            reason = (
+                match_obj.group('reason').strip().strip('(').strip(')').strip()
+            )
+            if not reason:
+                return True
+
+        return False
 
 
 class Xdoctester(DocTester):
@@ -370,8 +553,11 @@ class Xdoctester(DocTester):
         'timeout': (TimeoutDirective, TEST_TIMEOUT)
     }
 
-    bad_statements: typing.Dict[str, _Statement] = {
-        'fluid': _Fluid()
+    bad_statements: typing.Dict[
+        str, typing.Tuple[typing.Type[BadStatement], ...]
+    ] = {
+        'fluid': (Fluid,),
+        'skip': (SkipNoReason,),
     }
 
     def __init__(
@@ -480,25 +666,26 @@ class Xdoctester(DocTester):
 
     def _check_bad_statements(self, docstring: str) -> typing.Set[str]:
         bad_results = set()
-        for name, statement in self.bad_statements.items():
-            match_obj = statement.pattern.search(docstring)
-            if match_obj is not None:
+        for name, statement_cls in self.bad_statements.items():
+            if statement_cls[0](*statement_cls[1:]).check(docstring):
                 bad_results.add(name)
 
         return bad_results
 
     def run(self, api_name: str, docstring: str) -> typing.List[TestResult]:
         """Run the xdoctest with a docstring."""
-        # check bad statements first
+        # check bad statements
         bad_results = self._check_bad_statements(docstring)
         if bad_results:
             for name in bad_results:
-                logger.warning("%s %s", api_name, str(self.bad_statements[name]))
+                logger.warning(
+                    "%s %s", api_name, str(self.bad_statements[name][0].msg)
+                )
 
             return [
                 TestResult(
                     name=api_name,
-                    nocode=True,
+                    badstatement=True,
                 )
             ]
 
@@ -608,13 +795,9 @@ class Xdoctester(DocTester):
     def _execute_with_queue(self, queue, examples_to_test, examples_nocode):
         queue.put(self._execute(examples_to_test, examples_nocode))
 
-
     def print_summary(self, test_results, whl_error=None):
-        summary_success = []
-        summary_failed = []
-        summary_skiptest = []
-        summary_timeout = []
-        summary_nocodes = []
+        summary = collections.defaultdict(list)
+        is_fail = False
 
         logger.warning("----------------Check results--------------------")
         logger.warning(">>> Sample code test capacity: %s", self._test_capacity)
@@ -643,70 +826,20 @@ class Xdoctester(DocTester):
 
         else:
             for test_result in test_results:
-                if not test_result.nocode:
-                    if test_result.passed:
-                        summary_success.append(test_result.name)
+                summary[test_result.state].append(test_result)
+                if test_result.state.is_fail:
+                    is_fail = True
 
-                    if test_result.skipped:
-                        summary_skiptest.append(test_result.name)
+            summary = sorted(summary.items(), key=lambda x: x[0].order)
 
-                    if test_result.failed:
-                        summary_failed.append(test_result.name)
-
-                    if test_result.timeout:
-                        summary_timeout.append(
-                            {
-                                'api_name': test_result.name,
-                                'run_time': test_result.time,
-                            }
-                        )
-                else:
-                    summary_nocodes.append(test_result.name)
-
-            if len(summary_success):
-                logger.info(
-                    ">>> %d sample codes ran success in env: %s",
-                    len(summary_success),
-                    self._test_capacity,
+            for result_cls, result_list in summary:
+                logging_msg = result_cls.msg(
+                    len(result_list), self._test_capacity
                 )
-                logger.info('\n'.join(summary_success))
+                result_cls.logger(logging_msg)
+                result_cls.logger('\n'.join([str(r) for r in result_list]))
 
-            if len(summary_skiptest):
-                logger.warning(
-                    ">>> %d sample codes skipped in env: %s",
-                    len(summary_skiptest),
-                    self._test_capacity,
-                )
-                logger.warning('\n'.join(summary_skiptest))
-
-            if len(summary_nocodes):
-                logger.error(
-                    ">>> %d apis don't have sample codes or could not run test in env: %s",
-                    len(summary_nocodes),
-                    self._test_capacity,
-                )
-                logger.error('\n'.join(summary_nocodes))
-
-            if len(summary_timeout):
-                logger.error(
-                    ">>> %d sample codes ran timeout or error in env: %s",
-                    len(summary_timeout),
-                    self._test_capacity,
-                )
-                for _result in summary_timeout:
-                    logger.error(
-                        f"{_result['api_name']} - more than {_result['run_time']}s"
-                    )
-
-            if len(summary_failed):
-                logger.error(
-                    ">>> %d sample codes ran failed in env: %s",
-                    len(summary_failed),
-                    self._test_capacity,
-                )
-                logger.error('\n'.join(summary_failed))
-
-            if summary_failed or summary_timeout or summary_nocodes:
+            if is_fail:
                 logger.warning(
                     ">>> Mistakes found in sample codes in env: %s!",
                     self._test_capacity,
@@ -719,3 +852,4 @@ class Xdoctester(DocTester):
             self._test_capacity,
         )
         logger.warning("----------------End of the Check--------------------")
+
