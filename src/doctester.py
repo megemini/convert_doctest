@@ -240,7 +240,7 @@ class MetaResult(type):
         return mcs.__cls_map
 
 
-class Passed(Result, metaclass=MetaResult):
+class RPassed(Result, metaclass=MetaResult):
     name = 'passed'
     is_fail = False
 
@@ -249,7 +249,7 @@ class Passed(Result, metaclass=MetaResult):
         return f">>> {count} sample codes ran success in env: {env}"
 
 
-class Skipped(Result, metaclass=MetaResult):
+class RSkipped(Result, metaclass=MetaResult):
     name = 'skipped'
     is_fail = False
     logger = logger.warning
@@ -259,7 +259,7 @@ class Skipped(Result, metaclass=MetaResult):
         return f">>> {count} sample codes skipped in env: {env}"
 
 
-class Failed(Result, metaclass=MetaResult):
+class RFailed(Result, metaclass=MetaResult):
     name = 'failed'
     is_fail = True
     logger = logger.error
@@ -269,7 +269,7 @@ class Failed(Result, metaclass=MetaResult):
         return f">>> {count} sample codes ran failed in env: {env}"
 
 
-class NoCode(Result, metaclass=MetaResult):
+class RNoCode(Result, metaclass=MetaResult):
     name = 'nocode'
     is_fail = True
     logger = logger.error
@@ -279,7 +279,7 @@ class NoCode(Result, metaclass=MetaResult):
         return f">>> {count} apis don't have sample codes or could not run test in env: {env}"
 
 
-class Timeout(Result, metaclass=MetaResult):
+class RTimeout(Result, metaclass=MetaResult):
     name = 'timeout'
     is_fail = True
     logger = logger.error
@@ -287,16 +287,18 @@ class Timeout(Result, metaclass=MetaResult):
     @classmethod
     def msg(cls, count, env):
         return f">>> {count} sample codes ran timeout or error in env: {env}"
-    
 
-class BadStatement(Result, metaclass=MetaResult):
+
+class RBadStatement(Result, metaclass=MetaResult):
     name = 'badstatement'
     is_fail = True
     logger = logger.error
 
     @classmethod
     def msg(cls, count, env):
-        return f">>> {count} bad statements detected in sample codes in env: {env}"
+        return (
+            f">>> {count} bad statements detected in sample codes in env: {env}"
+        )
 
 
 class TestResult:
@@ -500,6 +502,7 @@ class BadStatement:
     msg: str = ''
 
     def check(self, docstring: str) -> bool:
+        """Return `True` for bad statement detected."""
         raise NotImplementedError
 
 
@@ -552,6 +555,36 @@ class SkipNoReason(BadStatement):
         return False
 
 
+class DeprecatedRequired(BadStatement):
+    msg = 'Please use `# doctest: +REQUIRES({})` instead of `# {} {}`.'
+
+    _pattern = re.compile(
+        r"""
+        \#
+        \s*
+        (?P<directive>require[sd]?\s*:)
+        (?P<env>.+)
+        """,
+        re.X,
+    )
+
+    def check(self, docstring):
+        for match_obj in self._pattern.finditer(docstring):
+            dep_directive = match_obj.group('directive').strip()
+            dep_env = match_obj.group('env').strip()
+
+            if dep_env:
+                env = 'env:' + ', env:'.join(
+                    [e.strip().upper() for e in dep_env.split(',') if e.strip()]
+                )
+                self.msg = self.__class__.msg.format(
+                    env, dep_directive, dep_env
+                )
+                return True
+
+        return False
+
+
 class Xdoctester(DocTester):
     """A Xdoctest doctester."""
 
@@ -564,6 +597,7 @@ class Xdoctester(DocTester):
     ] = {
         'fluid': (Fluid,),
         'skip': (SkipNoReason,),
+        'require': (DeprecatedRequired,),
     }
 
     def __init__(
@@ -670,11 +704,12 @@ class Xdoctester(DocTester):
 
         self._test_capacity = test_capacity
 
-    def _check_bad_statements(self, docstring: str) -> typing.Set[str]:
+    def _check_bad_statements(self, docstring: str) -> typing.Set[BadStatement]:
         bad_results = set()
-        for name, statement_cls in self.bad_statements.items():
-            if statement_cls[0](*statement_cls[1:]).check(docstring):
-                bad_results.add(name)
+        for _, statement_cls in self.bad_statements.items():
+            bad_statement = statement_cls[0](*statement_cls[1:])
+            if bad_statement.check(docstring):
+                bad_results.add(bad_statement)
 
         return bad_results
 
@@ -683,10 +718,8 @@ class Xdoctester(DocTester):
         # check bad statements
         bad_results = self._check_bad_statements(docstring)
         if bad_results:
-            for name in bad_results:
-                logger.warning(
-                    "%s >>> %s", api_name, str(self.bad_statements[name][0].msg)
-                )
+            for bad_statement in bad_results:
+                logger.warning("%s >>> %s", api_name, bad_statement.msg)
 
             return [
                 TestResult(
@@ -858,4 +891,3 @@ class Xdoctester(DocTester):
             self._test_capacity,
         )
         logger.warning("----------------End of the Check--------------------")
-
