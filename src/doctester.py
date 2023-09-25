@@ -331,8 +331,8 @@ class TestResult:
 
         if self.__unique_state is None:
             logger.warning('Default result will be set to FAILED!')
-            setattr(self, Failed.name, True)
-            self.__unique_state = Failed
+            setattr(self, RFailed.name, True)
+            self.__unique_state = RFailed
 
     @property
     def state(self) -> Result:
@@ -452,8 +452,8 @@ class DocTester:
 
 
 class Directive:
-    """Base class of global direvtives just for `xdoctest`.
-    """
+    """Base class of global direvtives just for `xdoctest`."""
+
     pattern: typing.Pattern
 
     def parse_directive(self, docstring: str) -> typing.Tuple[str, typing.Any]:
@@ -461,7 +461,6 @@ class Directive:
 
 
 class TimeoutDirective(Directive):
-    
     pattern = re.compile(
         r"""
         (?:
@@ -482,7 +481,7 @@ class TimeoutDirective(Directive):
         """,
         re.X | re.S,
     )
-    
+
     def __init__(self, timeout):
         self._timeout = timeout
 
@@ -493,9 +492,47 @@ class TimeoutDirective(Directive):
             match_start = match_obj.start()
             match_end = match_obj.end()
 
-            return docstring[:match_start] + '\n' + docstring[match_end:], float(op_time)
+            return (
+                (docstring[:match_start] + '\n' + docstring[match_end:]),
+                float(op_time),
+            )
 
         return docstring, float(self._timeout)
+
+
+class SingleProcessDirective(Directive):
+    pattern = re.compile(
+        r"""
+        (?:
+            (?:
+                \s*\>{3}\s*\#\s*x?doctest\:\s*
+            )
+            (?P<op>[\+\-])
+            (?:
+                SOLO
+            )
+            (?:
+                (?P<reason>.*?)
+            )
+            \s
+        )
+        """,
+        re.X | re.S,
+    )
+
+    def parse_directive(self, docstring):
+        match_obj = self.pattern.search(docstring)
+        if match_obj is not None:
+            op_reason = match_obj.group('reason')
+            match_start = match_obj.start()
+            match_end = match_obj.end()
+
+            return (
+                (docstring[:match_start] + '\n' + docstring[match_end:]),
+                op_reason,
+            )
+
+        return docstring, None
 
 
 class BadStatement:
@@ -589,7 +626,8 @@ class Xdoctester(DocTester):
     """A Xdoctest doctester."""
 
     directives: typing.Dict[str, typing.Tuple[typing.Type[Directive], ...]] = {
-        'timeout': (TimeoutDirective, TEST_TIMEOUT)
+        'timeout': (TimeoutDirective, TEST_TIMEOUT),
+        'solo': (SingleProcessDirective,),
     }
 
     bad_statements: typing.Dict[
@@ -778,6 +816,10 @@ class Xdoctester(DocTester):
     def _execute_xdoctest(
         self, examples_to_test, examples_nocode, **directives
     ):
+        # if use solo(single process), execute without multiprocessing/thread
+        if directives.get('solo') is not None:
+            return self._execute(examples_to_test, examples_nocode)
+
         if self._use_multiprocessing:
             _ctx = multiprocessing.get_context('spawn')
             result_queue = _ctx.Queue()
