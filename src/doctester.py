@@ -88,7 +88,7 @@ def _patch_float_precision(digits):
     pattern_number = re.compile(
         r"""
         (?:
-            (?<=[\s*\[\(\'\"\:])                        # number starts
+            (?:(?<=[\s*\[\(\'\"\:])|^)                  # number starts
             (?:                                         # int/float or complex-real
                 (?:
                     [+-]?
@@ -119,7 +119,7 @@ def _patch_float_precision(digits):
 
     def _sub_number(match_obj, digits):
         match_str = match_obj.group()
-        
+
         if 'j' in match_str or 'J' in match_str:
             try:
                 match_num = complex(match_str)
