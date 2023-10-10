@@ -22,6 +22,9 @@
 #### 示例检查
 使用 `xdoctest` 或 `convert-doctest` 对上述转换的示例代码进行检查。
 
+#### 旧格式检查
+检查文件是否仍然使用旧格式（不使用 `>>>`）的示例代码。
+
 ## 安装
 
 ```bash
@@ -98,6 +101,14 @@ $ convert-doctest doctest target_file.py -c cpu gpu
 ```shell
 $ convert-doctest doctest target_file.py -c cpu gpu xpu --kwargs "{'patch_float_precision':6}"
 ```
+
+#### 旧格式检查
+
+```shell
+$ convert-doctest nocodes target_file.py
+```
+
+如果检查出文件中仍有使用旧格式示例代码的情况，将会逐一列出。
 
 ## 注意事项
 

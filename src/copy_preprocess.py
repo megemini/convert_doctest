@@ -332,6 +332,46 @@ def _run_doctest(args):
     run_doctest(args)
 
 
+def _run_nocodes(args):
+    logger.info('-'*10 + 'Checking old style example as no codes' + '-'*10)
+
+    file_path = args.target
+    with open(file_path) as f:
+        codelines = f.readlines()
+    filename = file_path.rsplit('/', 1)[1] if '/' in file_path else file_path
+
+    old_style_apis = []
+    for docstring, line_no in extract_codeblock(codelines):
+        old_style = True
+
+        for line in docstring.splitlines():
+            if line.strip().startswith('>>>'):
+                old_style = False
+                break
+
+        if old_style:
+            old_style_apis.append('Test docstring from: file *{}* line number *{}*.'.format(filename, line_no))
+
+    if old_style_apis:
+        logger.warning(
+            ">>> %d apis use plain sample code style.",
+            len(old_style_apis),
+        )
+        logger.warning('=======================')
+        logger.warning('\n'.join(old_style_apis))
+        logger.warning('=======================')
+        logger.warning(">>> Check Failed!")
+        logger.warning(
+            ">>> DEPRECATION: Please do not use plain sample code style."
+        )
+        logger.warning(
+            ">>> For more information: https://www.paddlepaddle.org.cn/documentation/docs/zh/develop/dev_guides/style_guide_and_references/code_example_writing_specification_cn.html "
+        )
+    
+    else:
+        logger.info(">>> Check Passed!")
+
+
 def main():
     """
     Parse input arguments
@@ -342,6 +382,7 @@ def main():
 
     parser_convert = subparsers.add_parser('convert', help='convert code-block')
     parser_doctest = subparsers.add_parser('doctest', help='test code-block')
+    parser_nocodes = subparsers.add_parser('nocodes', help='check old style example as nocodes')
 
     parser_convert.add_argument('source', type=str, default='')
     parser_convert.add_argument('-t', '--target', type=str, default='')
@@ -351,6 +392,9 @@ def main():
     parser_doctest.add_argument('-c', '--capacity', nargs='*', default=['cpu'])
     parser_doctest.add_argument('--kwargs', type=str, default='{}')
     parser_doctest.set_defaults(func=_run_doctest)
+
+    parser_nocodes.add_argument('target', type=str, default='')
+    parser_nocodes.set_defaults(func=_run_nocodes)
 
     args = parser.parse_args()
 
