@@ -81,6 +81,24 @@ $ convert-doctest convert source_file.py
 $ convert-doctest --debug doctest target_file.py
 ```
 
+检查时添加运行时环境：
+
+```shell
+$ convert-doctest doctest target_file.py --capacity cpu gpu
+```
+
+或
+
+```shell
+$ convert-doctest doctest target_file.py -c cpu gpu
+```
+
+检查时添加 `xdoctester` 参数：
+
+```shell
+$ convert-doctest doctest target_file.py -c cpu gpu xpu --kwargs "{'patch_float_precision':6}"
+```
+
 ## 注意事项
 
 这个脚本只是辅助进行文件的转换，而且脚本依赖缩进的正确性，转换后仍存在较多问题！

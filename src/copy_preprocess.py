@@ -1,3 +1,4 @@
+import json
 import multiprocessing
 import sys
 import re
@@ -271,13 +272,17 @@ def extract_codeblock(code_lines):
                 yield code_block['codes'], line_no + code_block['line_no']
 
 
-def run_doctest(file_path, **kwargs):
+def run_doctest(args):
+    file_path = args.target
     with open(file_path) as f:
         codelines = f.readlines()
     filename = file_path.rsplit('/', 1)[1] if '/' in file_path else file_path
 
-    debug = kwargs.pop('debug')
-    doctester = Xdoctester(debug=debug, verbose=3 if debug else 2)
+    debug = args.debug
+    capacity = args.capacity
+    kwargs = json.loads(args.kwargs.replace("'", '"'))
+    doctester = Xdoctester(debug=debug, verbose=3 if debug else 2, **kwargs)
+    doctester.prepare(set(capacity))
 
     docstrings = []
     for docstring, line_no in extract_codeblock(codelines):
@@ -324,7 +329,7 @@ def _run_convert(args):
 
 def _run_doctest(args):
     logger.info('-'*10 + 'Running doctest' + '-'*10)
-    run_doctest(args.target, debug=args.debug)
+    run_doctest(args)
 
 
 def main():
@@ -339,10 +344,12 @@ def main():
     parser_doctest = subparsers.add_parser('doctest', help='test code-block')
 
     parser_convert.add_argument('source', type=str, default='')
-    parser_convert.add_argument('--target', type=str, default='')
+    parser_convert.add_argument('-t', '--target', type=str, default='')
     parser_convert.set_defaults(func=_run_convert)
 
     parser_doctest.add_argument('target', type=str, default='')
+    parser_doctest.add_argument('-c', '--capacity', nargs='*', default=['cpu'])
+    parser_doctest.add_argument('--kwargs', type=str, default='{}')
     parser_doctest.set_defaults(func=_run_doctest)
 
     args = parser.parse_args()
